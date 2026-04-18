@@ -1,0 +1,43 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs / runtime
+*.log
+/tmp/
+data/*.sqlite
+data/*.db
+
+# Playwright / browser automation cache
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Claude Code workspace metadata (local-only)
+.claude/
