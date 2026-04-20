@@ -19,7 +19,7 @@ def explain_enum_fix(source_value: str, suggested: str, field: str, record_ref: 
                 f"Suggested mapping: `{source_value}` → `{suggested}` for `{field}` on "
                 f"{record_ref}. Levenshtein distance of 1 character; no other candidate "
                 "within distance 3 in the Reference Values sheet. This is the canonical "
-                "value ingested by Iris for underwriting and reporting."
+                "value ingested by IRYSCLOUD for underwriting and reporting."
             ),
         }
     try:
@@ -30,7 +30,7 @@ def explain_enum_fix(source_value: str, suggested: str, field: str, record_ref: 
             model=MODEL,
             max_tokens=250,
             system=(
-                "You are the AI data mapping explainer in Iris, an insurance agency "
+                "You are the AI data mapping explainer in IRYSCLOUD, an insurance agency "
                 "management system. Be crisp, technical, 2-3 sentences max. Use "
                 "backticks around field and enum values."
             ),
@@ -70,7 +70,7 @@ def agentic_quote(prompt: str, context: dict) -> dict:
             model=MODEL,
             max_tokens=900,
             system=(
-                "You are Iris' agentic submission co-pilot for a commercial insurance "
+                "You are IRYSCLOUD's agentic submission co-pilot for a commercial insurance "
                 "agency. You produce crisp, market-ready submission packages in Markdown "
                 "using only the supplied structured context — do not invent carriers, "
                 "revenues, or people. Use clear sections and a 'Recommended carriers' "
@@ -107,7 +107,7 @@ async def agentic_quote_stream(prompt: str, context: dict):
                 model=MODEL,
                 max_tokens=900,
                 system=(
-                    "You are Iris' agentic submission co-pilot for a commercial insurance "
+                    "You are IRYSCLOUD's agentic submission co-pilot for a commercial insurance "
                     "agency. Produce crisp, market-ready Markdown using only the supplied "
                     "structured context — do not invent carriers, revenues, or people. "
                     "Use clear sections and a 'Recommended carriers' table with one-line "

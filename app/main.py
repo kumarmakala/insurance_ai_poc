@@ -27,7 +27,7 @@ STATIC = ROOT / "static"
 DATA = ROOT / "data"
 XLSX = DATA / "demo.xlsx"
 
-app = FastAPI(title="Iris POC", version="0.1.0")
+app = FastAPI(title="IRYSCLOUD POC", version="0.1.0")
 
 
 store.init_db()
@@ -349,12 +349,12 @@ async def api_ingest_stream(file: UploadFile = File(None)):
         counts = _live_counts()
         stages = [
             ("parse",    "Parse workbook",          f"{counts['sheets']} sheets · {counts['entities']+counts['humans']+counts['contacts']} rows detected"),
-            ("classify", "Classify source",         "Schema matched: Iris v4 Entity/Human/Contact pack"),
+            ("classify", "Classify source",         "Schema matched: IRYSCLOUD v4 Entity/Human/Contact pack"),
             ("map",      "Map to canonical",        f"{counts['mapping_issues']} mapping issues · 3 enum fixes queued"),
             ("dedupe",   "Dedupe + cluster",        f"{counts['dedup_clusters']} clusters · auto-merged at ≥0.85 confidence"),
             ("graph",    "Extract relationships",   f"{counts['relationships']} edges across {counts['entities']+counts['humans']} nodes"),
             ("validate", "Validate business rules", f"FEIN/SSN formats validated · {counts['open_reviews']} items to HITL"),
-            ("load",     "Load to Iris",            f"Committed {counts['entities']} entities · {counts['humans']} humans · {counts['contacts']} contacts"),
+            ("load",     "Load to IRYSCLOUD",       f"Committed {counts['entities']} entities · {counts['humans']} humans · {counts['contacts']} contacts"),
         ]
 
         per_stage_ms = max(1, pipeline_ms // len(stages))

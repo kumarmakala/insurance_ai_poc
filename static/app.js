@@ -1,5 +1,5 @@
 /* ==================================================================
- * Iris — Data Migration Console
+ * IRYSCLOUD — Data Migration Console
  * Single-file React SPA, no build step.
  * Sections:
  *   1. Utilities & API
@@ -426,9 +426,9 @@ function Sidebar({ active, onSelect, stats }) {
     return (
         <aside className="w-60 bg-ink-950 text-ink-100 flex flex-col min-h-screen sticky top-0">
             <div className="flex items-center gap-2.5 px-5 pt-5 pb-4 border-b border-ink-800">
-                <img src="/static/assets/irys_logo.png" alt="Iris" className="w-9 h-9 rounded-xl object-contain shadow-lg" />
+                <img src="/static/assets/irys_logo.png" alt="IRYSCLOUD" className="w-9 h-9 rounded-xl object-contain shadow-lg" />
                 <div>
-                    <div className="text-sm font-semibold tracking-tight text-white">Iris</div>
+                    <div className="text-sm font-semibold tracking-tight text-white">IRYSCLOUD</div>
                     <div className="text-[10px] text-ink-400 uppercase tracking-[.14em]">Migration Console</div>
                 </div>
             </div>
@@ -501,7 +501,7 @@ function Topbar({ active, onReset, llmMode, onCmd, stats }) {
                 </button>
                 <div className={`inline-flex items-center gap-1.5 text-[11.5px] px-2 py-1 rounded-full border ${llmMode === "live" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-ink-50 border-ink-200 text-ink-600"}`}>
                     <span className={`dot ${llmMode === "live" ? "dot-success" : "dot-success"}`} style={{margin: 0}} />
-                    {llmMode === "live" ? "Claude Sonnet 4.5 · live" : "Iris Agent · ready"}
+                    {llmMode === "live" ? "Claude Sonnet 4.5 · live" : "IRYSCLOUD Agent · ready"}
                 </div>
                 <Button variant="secondary" size="sm" icon="refresh" onClick={onReset}>Reset workspace</Button>
             </div>
@@ -631,8 +631,8 @@ function IngestPanel({ onIngested, onNavigate }) {
                     : reason.includes("only .xlsx")
                     ? "Only Excel (.xlsx) workbooks can be ingested today."
                     : reason.includes("failed to fetch") || reason.includes("network")
-                    ? "Lost connection to Iris. Check the server is running."
-                    : "Iris couldn't read that file. Open it in Excel to verify, then retry.";
+                    ? "Lost connection to IRYSCLOUD. Check the server is running."
+                    : "IRYSCLOUD couldn't read that file. Open it in Excel to verify, then retry.";
                 setErr(friendly);
                 toast.push("Ingestion failed", "error", friendly);
             }
@@ -667,7 +667,7 @@ function IngestPanel({ onIngested, onNavigate }) {
             const r = await fetch("/static/assets/sample.xlsx");
             if (!r.ok) throw new Error(`sample fetch ${r.status}`);
             const buf = await r.arrayBuffer();
-            const file = new File([buf], "Iris_Sample_Export.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+            const file = new File([buf], "IRYSCLOUD_Sample_Export.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
             await handleFile(file);
         } catch (e) {
             setErr(`Could not load the sample workbook: ${e.message || e}`);
@@ -680,9 +680,9 @@ function IngestPanel({ onIngested, onNavigate }) {
             <PageHeader
                 eyebrow="Migration console"
                 title="Ingest a vendor export"
-                subtitle="Drop an Excel (.xlsx) export. Iris classifies it, maps columns to the canonical schema, dedupes, builds relationships, validates, and loads to Iris — all visible, all audited. CSV/PDF/EML arriving next."
+                subtitle="Drop an Excel (.xlsx) export. IRYSCLOUD classifies it, maps columns to the canonical schema, dedupes, builds relationships, validates, and loads to IRYSCLOUD — all visible, all audited. CSV/PDF/EML arriving next."
                 actions={<>
-                    <a href="/static/assets/sample.xlsx" download="Iris_Ingestion_Template.xlsx" className="inline-block">
+                    <a href="/static/assets/sample.xlsx" download="IRYSCLOUD_Ingestion_Template.xlsx" className="inline-block">
                         <Button variant="secondary" size="sm" icon="download">Download template</Button>
                     </a>
                     <Button variant="soft" size="sm" icon="zap" disabled={running} onClick={runSample}>
@@ -936,7 +936,7 @@ function MappingPanel() {
                     <thead>
                         <tr>
                             <th>Source field</th>
-                            <th>Iris canonical</th>
+                            <th>IRYSCLOUD canonical</th>
                             <th>Sample</th>
                             <th>Status</th>
                             <th>AI note</th>
@@ -1168,7 +1168,7 @@ function GraphPanel() {
             <PageHeader
                 eyebrow="Data quality"
                 title="Relationship graph"
-                subtitle="Every person and business Iris discovered, and the edges between them. Click any node to see its ego network."
+                subtitle="Every person and business IRYSCLOUD discovered, and the edges between them. Click any node to see its ego network."
                 actions={<>
                     <Button variant="secondary" size="sm" icon="refresh" onClick={() => net && net.fit()}>Reset view</Button>
                     <Button variant="primary" size="sm" icon="download">Export PNG</Button>
@@ -1580,7 +1580,7 @@ function downloadAgentResponseAsPDF({ prompt, markdown, context, source }) {
     if (context?.markets_shortlisted != null) tags.push(`${context.markets_shortlisted} carriers`);
     const stamp = new Date().toLocaleString();
     const doc = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Iris Agent — Submission</title>
+<html><head><meta charset="utf-8"><title>IRYSCLOUD Agent — Submission</title>
 <style>
   @page { margin: 0.6in; }
   html, body { background: #fff; color: #0f172a; }
@@ -1610,7 +1610,7 @@ function downloadAgentResponseAsPDF({ prompt, markdown, context, source }) {
 </style></head>
 <body>
   <header>
-    <div class="brand">Iris · Submission Agent</div>
+    <div class="brand">IRYSCLOUD · Submission Agent</div>
     <h1>Submission response</h1>
     <div class="meta"><span>Generated ${escape(stamp)}</span></div>
     ${tags.length ? `<div class="tags">${tags.map(t => `<span class="tag">${t}</span>`).join("")}</div>` : ""}
@@ -1620,7 +1620,7 @@ function downloadAgentResponseAsPDF({ prompt, markdown, context, source }) {
     <div class="text">${escape(prompt || "")}</div>
   </section>
   <div class="body">${html}</div>
-  <footer><span>Grounded in migrated records</span><span>Iris AI Data Migration</span></footer>
+  <footer><span>Grounded in migrated records</span><span>IRYSCLOUD AI Data Migration</span></footer>
 </body></html>`;
 
     const iframe = document.createElement("iframe");
@@ -1709,7 +1709,7 @@ function AgentPanel() {
             <PageHeader
                 eyebrow="AI co-pilot"
                 title="Submission agent"
-                subtitle="Ask Iris to build a carrier submission from the migrated data. It grounds every fact in the canonical records."
+                subtitle="Ask IRYSCLOUD to build a carrier submission from the migrated data. It grounds every fact in the canonical records."
                 actions={<Chip kind="brand" icon="sparkle">Streaming</Chip>}
             />
 
@@ -1718,7 +1718,7 @@ function AgentPanel() {
                     <div className="px-5 py-3 border-b border-ink-200 flex items-center gap-2 text-[12.5px] text-ink-600">
                         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center"><Icon name="bot" size={14} /></div>
                         <div>
-                            <div className="text-ink-900 font-medium">Iris Agent</div>
+                            <div className="text-ink-900 font-medium">IRYSCLOUD Agent</div>
                             <div className="text-[11px] text-ink-500">Sees your migrated data. Doesn't guess.</div>
                         </div>
                     </div>
