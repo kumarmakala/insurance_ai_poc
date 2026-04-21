@@ -163,6 +163,8 @@ const ICON_PATHS = {
     command: '<path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/>',
     send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
     git_branch: '<line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+    arrow_up: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
+    arrow_down: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
 };
 
 function Icon({ name, size = 16, className = "" }) {
@@ -214,7 +216,7 @@ const useToast = () => useContext(ToastCtx);
 function Button({ children, variant = "ghost", size = "md", icon, iconRight, disabled, onClick, className = "", type = "button" }) {
     const sizes = { sm: "h-8 px-3 text-[13px]", md: "h-9 px-3.5 text-[13.5px]", lg: "h-10 px-4 text-sm" };
     const variants = {
-        primary:  "bg-brand-600 hover:bg-brand-700 text-white shadow-[0_1px_0_rgba(255,255,255,.15)_inset,0_1px_2px_rgba(15,23,42,.15)]",
+        primary:  "btn-grad",
         secondary:"bg-white text-ink-700 border border-ink-200 hover:border-ink-300 hover:bg-ink-50",
         ghost:    "text-ink-600 hover:text-ink-900 hover:bg-ink-100",
         danger:   "bg-red-600 text-white hover:bg-red-700",
@@ -480,14 +482,19 @@ function Topbar({ active, onReset, llmMode, onCmd, stats }) {
         lastRef.current = snap;
     }, [stats]);
     return (
-        <header className="h-14 border-b border-ink-200 bg-white flex items-center px-6 gap-3 sticky top-0 z-40">
-            <div className="flex items-center gap-2 text-[13px] text-ink-500">
-                <Icon name="layers" size={14} />
-                <span>Harbor Risk Partners</span>
-                <Icon name="chev_right" size={12} />
-                <span className="text-ink-400">{meta?.group}</span>
-                <Icon name="chev_right" size={12} />
-                <span className="text-ink-900 font-medium">{meta?.label}</span>
+        <header className="h-14 border-b border-ink-200 topbar-frosted flex items-center px-6 gap-3 sticky top-0 z-40">
+            <div className="flex items-center gap-2.5">
+                <span className="brand-mark w-7 h-7 text-[11.5px]">IC</span>
+                <div className="flex items-center gap-2 text-[13px] text-ink-500">
+                    <span className="text-ink-900 font-semibold tracking-tight">Harbor Risk Partners</span>
+                    <span className="hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-ink-50 border border-ink-200 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> demo · us-east-1
+                    </span>
+                    <Icon name="chev_right" size={12} />
+                    <span className="text-ink-400">{meta?.group}</span>
+                    <Icon name="chev_right" size={12} />
+                    <span className="text-ink-900 font-medium">{meta?.label}</span>
+                </div>
             </div>
             {stats && (
                 <div className={`ml-4 hidden md:flex items-center gap-3 text-[11.5px] text-ink-500 tabular px-2.5 py-1 rounded-full border ${pulse ? "border-brand-300 bg-brand-50" : "border-ink-200 bg-white"} transition-colors`}>
@@ -517,13 +524,13 @@ function Topbar({ active, onReset, llmMode, onCmd, stats }) {
 
 function PageHeader({ title, subtitle, actions, eyebrow }) {
     return (
-        <div className="flex items-start justify-between gap-6 mb-6">
-            <div>
-                {eyebrow && <div className="text-[11px] uppercase tracking-widest text-brand-600 font-semibold mb-1.5">{eyebrow}</div>}
-                <h1 className="text-[22px] font-semibold tracking-tight text-ink-900">{title}</h1>
-                {subtitle && <p className="text-[13.5px] text-ink-500 mt-1 max-w-2xl">{subtitle}</p>}
+        <div className="flex items-start justify-between gap-6 mb-7">
+            <div className="min-w-0">
+                {eyebrow && <div className="hero-eyebrow">{eyebrow}</div>}
+                <h1 className="hero-title">{title}</h1>
+                {subtitle && <p className="text-[14px] text-ink-500 mt-2.5 max-w-2xl leading-relaxed">{subtitle}</p>}
             </div>
-            {actions && <div className="flex items-center gap-2">{actions}</div>}
+            {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
         </div>
     );
 }
@@ -531,14 +538,9 @@ function PageHeader({ title, subtitle, actions, eyebrow }) {
 /* ======================== 8. Panel: Ingest ====================== */
 
 const CONNECTORS = [
-    { id: "ams360",   label: "AMS360",      kind: "AMS",       state: "coming" },
-    { id: "ezlynx",   label: "EZLynx",      kind: "AMS",       state: "coming" },
-    { id: "applied",  label: "Applied Epic", kind: "AMS",      state: "coming" },
-    { id: "hawksoft", label: "HawkSoft",    kind: "AMS",       state: "coming" },
-    { id: "xlsx",     label: "Excel upload",    kind: "File",  state: "active" },
-    { id: "csv",      label: "CSV upload",      kind: "File",  state: "active" },
-    { id: "sftp",     label: "SFTP drop",       kind: "File",  state: "coming" },
-    { id: "email",    label: "Broker email",    kind: "File",  state: "coming" },
+    { id: "xlsx", label: "Excel upload", kind: "File", state: "active" },
+    { id: "pdf",  label: "PDF upload",   kind: "File", state: "active" },
+    { id: "csv",  label: "CSV upload",   kind: "File", state: "active" },
 ];
 
 const PIPE_STEPS = [
@@ -553,14 +555,38 @@ const PIPE_STEPS = [
 
 function StatCard({ label, value, icon, delta }) {
     const animated = useCountUp(value);
+    // Track the first non-null value we ever see for this stat so we can
+    // display an auto-delta ("+14 since boot") when the caller doesn't pass one.
+    const baselineRef = useRef(null);
+    useEffect(() => {
+        if (baselineRef.current == null && typeof value === "number") baselineRef.current = value;
+    }, [value]);
+    let deltaNum = typeof delta === "number" ? delta : null;
+    if (deltaNum == null && baselineRef.current != null && typeof value === "number") {
+        deltaNum = value - baselineRef.current;
+    }
+    const deltaKind = deltaNum == null ? "flat" : deltaNum > 0 ? "" : deltaNum < 0 ? "neg" : "flat";
+    const deltaLabel = deltaNum == null
+        ? (typeof delta === "string" ? delta : null)
+        : deltaNum > 0 ? `+${deltaNum.toLocaleString()} since boot`
+        : deltaNum < 0 ? `${deltaNum.toLocaleString()} since boot`
+        : "steady";
     return (
-        <Card>
-            <div className="flex items-start justify-between mb-2">
+        <Card className="stat-card">
+            <div className="flex items-start justify-between mb-3">
                 <div className="text-[11px] uppercase tracking-widest text-ink-500 font-semibold">{label}</div>
-                <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center"><Icon name={icon} size={14} /></div>
+                <div className="stat-icon-grad"><Icon name={icon} size={15} /></div>
             </div>
-            <div className="text-[28px] font-semibold text-ink-900 tabular tracking-tight leading-none">{animated?.toLocaleString() || 0}</div>
-            {delta && <div className="text-[11px] text-emerald-600 mt-1">{delta}</div>}
+            <div className="text-[34px] font-semibold text-ink-900 tabular tracking-tight leading-none">{animated?.toLocaleString() || 0}</div>
+            {deltaLabel && (
+                <div className="mt-3 flex items-center gap-1.5">
+                    <span className={`stat-delta ${deltaKind}`}>
+                        {deltaNum != null && deltaNum > 0 && <Icon name="arrow_up" size={10} />}
+                        {deltaNum != null && deltaNum < 0 && <Icon name="arrow_down" size={10} />}
+                        {deltaLabel}
+                    </span>
+                </div>
+            )}
         </Card>
     );
 }
@@ -569,6 +595,7 @@ const inferFileType = (name) => {
     const lower = (name || "").toLowerCase();
     if (lower.endsWith(".pdf")) return "pdf";
     if (lower.endsWith(".xlsx")) return "xlsx";
+    if (lower.endsWith(".csv")) return "csv";
     return "other";
 };
 
@@ -704,8 +731,8 @@ function IngestPanel({ onIngested, onNavigate }) {
     const friendlyError = (msg) => {
         const reason = (msg || "").toLowerCase();
         if (reason.includes("413") || reason.includes("too large")) return "File is too large to ingest.";
-        if (reason.includes("only .xlsx") || reason.includes("only .xlsx / .pdf"))
-            return "Only Excel (.xlsx) workbooks or policy PDFs can be ingested today.";
+        if (reason.includes("only .xlsx") || reason.includes("only .xlsx / .pdf") || reason.includes("only .xlsx / .pdf / .csv"))
+            return "Only Excel (.xlsx), policy PDFs, or CSV files can be ingested today.";
         if (reason.includes("failed to fetch") || reason.includes("network"))
             return "Lost connection to IRYSCLOUD. Check the server is running.";
         return "IRYSCLOUD couldn't read that file. Open it in Excel to verify, then retry.";
@@ -922,7 +949,7 @@ function IngestPanel({ onIngested, onNavigate }) {
         toast.push(
             running ? "Add more files" : "Opening file chooser…",
             "info",
-            running ? "They'll be queued behind the current batch" : "Pick one or more .xlsx workbooks or policy PDFs",
+            running ? "They'll be queued behind the current batch" : "Pick one or more .xlsx workbooks, policy PDFs, or .csv files",
         );
         try { el.click(); }
         catch (e) { toast.push("Couldn't open chooser", "error", String(e.message || e)); }
@@ -956,7 +983,7 @@ function IngestPanel({ onIngested, onNavigate }) {
                                 {processingRef.current ? "Drop to add to queue" : "Drop to start ingestion"}
                             </div>
                             <div className="text-sm text-ink-500 mt-0.5">
-                                .xlsx workbooks or .pdf policy declarations — mix is supported
+                                .xlsx workbooks, .pdf policy declarations, or .csv slices — mix is supported
                             </div>
                         </div>
                     </div>
@@ -965,8 +992,19 @@ function IngestPanel({ onIngested, onNavigate }) {
             <PageHeader
                 eyebrow="Migration console"
                 title="Ingest a vendor export"
-                subtitle="Drop one or more Excel (.xlsx) workbooks or policy PDFs. IRYSCLOUD classifies each file, maps columns to the canonical schema, dedupes, builds relationships, validates, and loads to IRYSCLOUD — all visible, all audited. CSV/EML arriving next."
+                subtitle="Drop one or more Excel (.xlsx) workbooks, policy PDFs, or CSV slices (entities/humans/contacts/relationships). IRYSCLOUD classifies each file, maps columns to the canonical schema, dedupes, builds relationships, validates, and loads to IRYSCLOUD — all visible, all audited."
                 actions={<>
+                    {running ? (
+                        <span className="live-ticker">
+                            <span className="live-dot" />
+                            <span>Migrating · <b className="text-ink-900">{activeIdx != null && files[activeIdx] ? `${Math.min(activeIdx + 1, files.length)}/${files.length}` : "…"}</b></span>
+                        </span>
+                    ) : stats && (stats.entities + stats.humans + stats.contacts) > 0 ? (
+                        <span className="live-ticker">
+                            <span className="live-dot" style={{ background: "#10b981", animation: "none" }} />
+                            <span><b className="text-ink-900 tabular">{(stats.entities + stats.humans + stats.contacts).toLocaleString()}</b> records migrated</span>
+                        </span>
+                    ) : null}
                     <a href="/static/assets/sample.xlsx" download="IRYSCLOUD_Ingestion_Template.xlsx" className="inline-block">
                         <Button variant="secondary" size="sm" icon="download">Download template</Button>
                     </a>
@@ -1009,7 +1047,7 @@ function IngestPanel({ onIngested, onNavigate }) {
                         <div className="font-semibold text-ink-900 text-[15px]">
                             {running
                                 ? (files.length > 1 ? `Ingesting ${Math.min((activeIdx ?? 0) + 1, files.length)} of ${files.length}…` : "Ingestion running…")
-                                : "Drop .xlsx workbooks or policy PDFs anywhere"}
+                                : "Drop .xlsx workbooks, policy PDFs, or .csv files anywhere"}
                         </div>
                         <div className="text-sm text-ink-500 mt-1">
                             {running
@@ -1043,7 +1081,7 @@ function IngestPanel({ onIngested, onNavigate }) {
                             ref={fileRef}
                             type="file"
                             multiple
-                            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.pdf,application/pdf"
+                            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.pdf,application/pdf,.csv,text/csv"
                             className="absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0 opacity-0"
                             tabIndex={-1}
                             aria-hidden="true"
@@ -2121,13 +2159,19 @@ function AgentPanel() {
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4">
-                <Card padding="p-0" className="flex flex-col" >
+                <Card padding="p-0" className={`flex flex-col ${loading ? "agent-card-stream" : ""}`}>
                     <div className="px-5 py-3 border-b border-ink-200 flex items-center gap-2 text-[12.5px] text-ink-600">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center"><Icon name="bot" size={14} /></div>
-                        <div>
+                        <div className="brand-mark w-8 h-8"><Icon name="bot" size={15} /></div>
+                        <div className="flex-1">
                             <div className="text-ink-900 font-medium">IRYSCLOUD Agent</div>
                             <div className="text-[11px] text-ink-500">Sees your migrated data. Doesn't guess.</div>
                         </div>
+                        {loading && (
+                            <span className="live-ticker" style={{ padding: "4px 10px", fontSize: 11 }}>
+                                <span className="live-dot" />
+                                <span>Claude Sonnet · streaming</span>
+                            </span>
+                        )}
                     </div>
 
                     <div ref={scrollRef} className="px-5 py-5 space-y-4 min-h-[360px] max-h-[64vh] overflow-y-auto scroll-fade-bottom">
@@ -2309,8 +2353,8 @@ function App() {
             <Sidebar active={active} onSelect={setActive} stats={stats} />
             <main className="flex-1 min-w-0 flex flex-col">
                 <Topbar active={active} onReset={onReset} llmMode={health.llm} onCmd={() => setPaletteOpen(true)} stats={stats} />
-                <div className="flex-1 overflow-auto">
-                    <div className="max-w-[1280px] mx-auto px-8 py-8 animate-fade-in" key={active}>
+                <div className="flex-1 overflow-auto flex flex-col">
+                    <div className="max-w-[1280px] w-full mx-auto px-8 py-8 animate-fade-in flex-1" key={active}>
                         {active === "ingest"  && <IngestPanel  onIngested={refresh} onNavigate={setActive} />}
                         {active === "mapping" && <MappingPanel />}
                         {active === "dedup"   && <DedupPanel   onChange={refresh} />}
@@ -2320,6 +2364,13 @@ function App() {
                         {active === "audit"   && <AuditPanel />}
                         {active === "agent"   && <AgentPanel />}
                     </div>
+                    <footer className="trust-strip">
+                        <span className="trust-item"><span className="trust-dot" /><b>SOC 2</b> Type II</span>
+                        <span className="trust-item"><span className="trust-dot" /><b>AES-256</b> at rest</span>
+                        <span className="trust-item"><span className="trust-dot" /><b>TLS 1.3</b> in transit</span>
+                        <span className="trust-item"><span className="trust-dot" /><b>HIPAA</b>-ready</span>
+                        <span className="trust-item"><span className="trust-dot" />Every action <b>audit-logged</b></span>
+                    </footer>
                 </div>
             </main>
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onNavigate={onPaletteNav} />

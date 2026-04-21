@@ -668,9 +668,97 @@ def parse_pdf(pdf_path: str | Path) -> IngestResult:
     return result
 
 
+_CSV_RELATIONSHIP_KEYS = {"src_type", "src_name", "rel_type", "dst_type", "dst_name"}
+_CSV_CONTACT_KEYS = {"parentmoduletype", "parentmoduleidentifier", "contacttype", "physicaladdress_line1"}
+_CSV_ENTITY_KEYS = {"entityidentifier", "legalentitytype", "doingbusinessas", "fein"}
+_CSV_HUMAN_KEYS = {"humanidentifier", "firstname", "lastname", "dateofbirth"}
+
+
+def _detect_csv_kind(headers: list[str], filename: str) -> str:
+    """Classify a CSV by header signals, with filename hints as a tiebreaker."""
+    lower = {(h or "").strip().lower() for h in headers if h}
+    fname = filename.lower()
+
+    if lower & _CSV_RELATIONSHIP_KEYS == _CSV_RELATIONSHIP_KEYS:
+        return "relationships"
+    if lower & _CSV_CONTACT_KEYS:
+        return "contacts"
+    if lower & _CSV_HUMAN_KEYS:
+        return "humans"
+    if lower & _CSV_ENTITY_KEYS:
+        return "entities"
+
+    if "relationship" in fname:
+        return "relationships"
+    if "contact" in fname:
+        return "contacts"
+    if "human" in fname or "person" in fname:
+        return "humans"
+    if "market" in fname and len(headers) <= 2:
+        return "markets"
+    if "reference" in fname and len(headers) >= 2:
+        return "reference"
+    if "entit" in fname:
+        return "entities"
+
+    # Unknown — route through entities so Schema Mapping surfaces the columns.
+    return "entities"
+
+
+def parse_csv(path: str | Path) -> IngestResult:
+    """Parse a single CSV file. Classifies by headers and populates the matching
+    slice of IngestResult. Other slices stay empty — downstream helpers tolerate this."""
+    import csv as _csv
+
+    p = Path(path)
+    result = IngestResult()
+    # utf-8-sig strips an Excel-written BOM; newline="" lets csv handle line endings.
+    with p.open("r", newline="", encoding="utf-8-sig", errors="replace") as fh:
+        rows = [list(r) for r in _csv.reader(fh)]
+    if not rows:
+        return result
+
+    headers = [str(_as_cell(h) or "").strip() for h in rows[0]]
+    kind = _detect_csv_kind(headers, p.name)
+
+    if kind == "relationships":
+        result.relationships = _parse_relationships(rows)
+    elif kind == "markets":
+        result.markets = _parse_markets(rows)
+    elif kind == "reference":
+        result.reference = _parse_reference(rows)
+    else:
+        dicts = _parse_tabular(rows)
+        if kind == "humans":
+            result.humans = dicts
+        elif kind == "contacts":
+            result.contacts = dicts
+        else:
+            result.entities = dicts
+
+    sample_rows = []
+    for r in rows[1:3]:
+        cells = [
+            ("" if _as_cell(c) is None else str(_as_cell(c)))
+            for c in (list(r) + [None] * max(0, len(headers) - len(r)))[: len(headers)]
+        ]
+        sample_rows.append(cells)
+    result.sheets.append({
+        "name": p.name,
+        "kind": kind,
+        "rows": max(0, len(rows) - 1),
+        "cols": len(headers),
+        "headers": headers,
+        "sample": sample_rows,
+    })
+    return result
+
+
 def parse_source(path: str | Path) -> IngestResult:
     """Dispatch to the right parser based on file extension."""
     lower = str(path).lower()
     if lower.endswith(".pdf"):
         return parse_pdf(path)
+    if lower.endswith(".csv"):
+        return parse_csv(path)
     return parse_workbook(path)

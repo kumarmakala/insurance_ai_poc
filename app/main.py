@@ -307,6 +307,8 @@ def api_ingest(file: UploadFile = File(None), reset: bool = True):
             dest = DATA / "demo.xlsx"
         elif fname.endswith(".pdf"):
             dest = DATA / "demo.pdf"
+        elif fname.endswith(".csv"):
+            dest = DATA / "demo.csv"
         else:
             dest = None
         if dest is not None:
@@ -344,7 +346,7 @@ async def api_ingest_stream(file: UploadFile = File(None), reset: bool = True):
     """
     filename = (file.filename if file else None) or "unknown"
     lower = filename.lower()
-    supported = lower.endswith(".xlsx") or lower.endswith(".pdf")
+    supported = lower.endswith(".xlsx") or lower.endswith(".pdf") or lower.endswith(".csv")
     file_bytes = b""
     if file is not None and supported:
         file_bytes = await file.read()
@@ -354,10 +356,15 @@ async def api_ingest_stream(file: UploadFile = File(None), reset: bool = True):
         yield _sse("start", {"filename": filename, "size": len(file_bytes), "ts": time.time()})
 
         if not supported:
-            yield _sse("error", {"message": f"Only .xlsx / .pdf supported (got {filename})"})
+            yield _sse("error", {"message": f"Only .xlsx / .pdf / .csv supported (got {filename})"})
             return
 
-        dest = DATA / ("demo.pdf" if lower.endswith(".pdf") else "demo.xlsx")
+        if lower.endswith(".pdf"):
+            dest = DATA / "demo.pdf"
+        elif lower.endswith(".csv"):
+            dest = DATA / "demo.csv"
+        else:
+            dest = DATA / "demo.xlsx"
         with dest.open("wb") as out:
             out.write(file_bytes)
         yield _sse("saved", {"path": str(dest), "bytes": len(file_bytes)})

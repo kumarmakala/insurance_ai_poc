@@ -355,3 +355,238 @@ kbd.kbd, .kbd {
 }
 @keyframes caret-blink { to { visibility: hidden; } }
 .md > *:last-child > .stream-caret { vertical-align: baseline; }
+
+/* ------------------------------------------------------------------
+ * Signature gradient — used sparingly on primary CTA, logo mark,
+ * active nav, progress bar, streaming agent card. Feel: indigo →
+ * violet → fuchsia, diagonal, saturated but not cartoonish.
+ * ------------------------------------------------------------------ */
+:root {
+    --grad-brand: linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #db2777 115%);
+    --grad-brand-soft: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 50%, #fdf2f8 100%);
+    --grad-ink: linear-gradient(180deg, #0f172a 0%, #020617 100%);
+}
+
+/* Primary CTA — gradient fill + subtle inset highlight + crisp shadow.
+   The btn-grad class is applied on top of Tailwind sizing, so it wins
+   the background/border war without us touching the Button component. */
+.btn-grad {
+    background: var(--grad-brand) !important;
+    color: #ffffff !important;
+    border: 0 !important;
+    box-shadow:
+        0 1px 0 rgba(255,255,255,.18) inset,
+        0 1px 2px rgba(79,70,229,.25),
+        0 4px 14px -4px rgba(124,58,237,.45) !important;
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.btn-grad:hover:not(:disabled) {
+    filter: brightness(1.05) saturate(1.05);
+    box-shadow:
+        0 1px 0 rgba(255,255,255,.22) inset,
+        0 2px 4px rgba(79,70,229,.3),
+        0 8px 22px -4px rgba(219,39,119,.45) !important;
+    transform: translateY(-0.5px);
+}
+.btn-grad:active:not(:disabled) { transform: translateY(0); }
+
+/* Logo mark in topbar/sidebar — gradient block with monogram lift */
+.brand-mark {
+    background: var(--grad-brand);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: .01em;
+    box-shadow:
+        0 1px 0 rgba(255,255,255,.2) inset,
+        0 6px 16px -6px rgba(124,58,237,.6);
+}
+
+/* Hero title for PageHeader — large, tight, with optical centering.
+   Sits at 32px on mobile, 36px on md+. Eyebrow gets a gradient pill. */
+.hero-title {
+    font-size: 32px;
+    line-height: 1.05;
+    letter-spacing: -0.022em;
+    font-weight: 600;
+    color: #0f172a;
+}
+@media (min-width: 768px) { .hero-title { font-size: 36px; } }
+.hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    font-weight: 600;
+    color: #4f46e5;
+    margin-bottom: 10px;
+}
+.hero-eyebrow::before {
+    content: "";
+    width: 22px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--grad-brand);
+}
+
+/* Stat card v2 — soft gradient icon tile, delta chip, hover lift.
+   Drop in via wrapper class; nothing about Card's shadow changes. */
+.stat-card {
+    position: relative;
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+.stat-card:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 1px 2px rgba(15,23,42,.05),
+        0 12px 24px -14px rgba(15,23,42,.2),
+        0 0 0 1px rgba(15,23,42,.06);
+}
+.stat-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 14px; right: 14px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--grad-brand);
+    opacity: 0;
+    transition: opacity .18s ease;
+}
+.stat-card:hover::before { opacity: 1; }
+.stat-icon-grad {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #4f46e5;
+    background: var(--grad-brand-soft);
+    border: 1px solid rgba(124,58,237,.14);
+}
+.stat-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+}
+.stat-delta.neg { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.stat-delta.flat { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+
+/* Pipeline node — tighter, higher-contrast gradients, softer radius */
+.pipe-node { border-radius: 12px; }
+.pipe-node.pipe-running {
+    background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+    border-color: #f59e0b;
+    box-shadow:
+        0 0 0 4px rgba(245,158,11,.12),
+        0 2px 8px -2px rgba(245,158,11,.28);
+}
+.pipe-node.pipe-success {
+    background: linear-gradient(180deg, #f0fdfa 0%, #d1fae5 100%);
+    border-color: #10b981;
+    box-shadow: 0 2px 8px -4px rgba(16,185,129,.35);
+}
+
+/* Sidebar active state — switch to signature gradient */
+.nav-item.active {
+    background: var(--grad-brand);
+    color: #fff;
+    box-shadow:
+        0 1px 0 rgba(255,255,255,.12) inset,
+        0 6px 14px -6px rgba(124,58,237,.55);
+}
+
+/* Agent streaming card — animated gradient outline that breathes while
+   tokens are arriving. Applied to the outer Card wrapper only when
+   streaming is true; degrades to a flat border otherwise. */
+.agent-card-stream {
+    position: relative;
+    isolation: isolate;
+}
+.agent-card-stream::before {
+    content: "";
+    position: absolute;
+    inset: -1.5px;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: conic-gradient(from var(--a, 0deg),
+        #4f46e5 0%, #7c3aed 25%, #db2777 50%, #7c3aed 75%, #4f46e5 100%);
+    -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+            mask-composite: exclude;
+    animation: conic-spin 4s linear infinite;
+    z-index: -1;
+    opacity: .9;
+}
+@property --a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes conic-spin { to { --a: 360deg; } }
+
+/* Trust strip — the "sell the CTO in one second" footer */
+.trust-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 14px 20px;
+    font-size: 11px;
+    color: #64748b;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .04em;
+    border-top: 1px solid #e2e8f0;
+    background:
+        radial-gradient(ellipse at center top, rgba(79,70,229,.04) 0%, transparent 60%),
+        #ffffff;
+}
+.trust-strip .trust-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+.trust-strip .trust-dot {
+    width: 6px; height: 6px; border-radius: 999px;
+    background: #10b981;
+    box-shadow: 0 0 0 3px rgba(16,185,129,.14);
+}
+.trust-strip b { color: #0f172a; font-weight: 600; letter-spacing: .02em; }
+
+/* Live rows ticker in the Ingest hero — mono, tabular, breathing dot */
+.live-ticker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--grad-brand-soft);
+    border: 1px solid rgba(124,58,237,.18);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: #4338ca;
+    font-weight: 500;
+}
+.live-ticker .live-dot {
+    width: 7px; height: 7px; border-radius: 999px;
+    background: #4f46e5;
+    box-shadow: 0 0 0 0 rgba(79,70,229,.5);
+    animation: pulseDot 1.6s cubic-bezier(.6,.01,.4,1) infinite;
+}
+
+/* Topbar polish — subtle frosted blur so it feels layered */
+.topbar-frosted {
+    backdrop-filter: saturate(180%) blur(10px);
+    -webkit-backdrop-filter: saturate(180%) blur(10px);
+    background: rgba(255,255,255,.82);
+}
