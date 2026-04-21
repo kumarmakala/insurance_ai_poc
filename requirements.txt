@@ -1,6 +1,7 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-calamine==0.2.3
+pypdf==5.1.0
 rapidfuzz==3.10.0
 scikit-learn==1.5.2
 anthropic==0.39.0

@@ -36,10 +36,15 @@ store.init_db()
 @app.on_event("startup")
 async def bootstrap():
     """On first boot, auto-ingest demo.xlsx so the demo is instantly populated."""
-    with store.tx() as conn:
-        (cnt,) = conn.execute("SELECT COUNT(*) FROM entities").fetchone()
+    loop = asyncio.get_event_loop()
+
+    def _check_and_seed():
+        with store.tx() as conn:
+            (cnt,) = conn.execute("SELECT COUNT(*) FROM entities").fetchone()
         if cnt == 0 and XLSX.exists():
             _full_ingest(str(XLSX), actor="system-boot")
+
+    await loop.run_in_executor(None, _check_and_seed)
 
 
 _ENTITY_COLS = (
@@ -80,9 +85,9 @@ def _copy_rows(cur, table: str, cols: tuple[str, ...], rows) -> None:
             cp.write_row(r)
 
 
-def _full_ingest(xlsx_path: str, actor: str = "demo-user"):
+def _full_ingest(source_path: str, actor: str = "demo-user"):
     """Run the full pipeline and populate AlloyDB via bulk COPY. Idempotent via reset."""
-    res = ingest.parse_workbook(xlsx_path)
+    res = ingest.parse_source(source_path)
 
     entities, humans = dedupe.seed_demo_duplicates(res.entities, res.humans)
 
@@ -265,7 +270,7 @@ def _full_ingest(xlsx_path: str, actor: str = "demo-user"):
         _copy_rows(cur, "dedup_clusters", _DEDUP_COLS, dedup_tuples)
         _copy_rows(cur, "review_queue", _REVIEW_COLS, review_tuples)
 
-    store.write_audit(actor=actor, action="INGEST", field=None, target=Path(xlsx_path).name, reason="full pipeline run")
+    store.write_audit(actor=actor, action="INGEST", field=None, target=Path(source_path).name, reason="full pipeline run")
 
 
 @app.get("/")
@@ -274,7 +279,7 @@ async def root():
 
 
 @app.get("/api/health")
-async def health():
+def health():
     return {
         "ok": True,
         "llm": "live" if os.environ.get("ANTHROPIC_API_KEY") else "fallback",
@@ -283,11 +288,18 @@ async def health():
 
 
 @app.post("/api/ingest")
-async def api_ingest(file: UploadFile = File(None)):
-    """Accept an upload; if xlsx copy to data/demo.xlsx and re-run pipeline."""
+def api_ingest(file: UploadFile = File(None)):
+    """Accept an upload; xlsx or pdf are copied into data/ and run through the pipeline.
+    Sync endpoint so Starlette runs it in its threadpool — keeps the async loop free."""
     if file is not None:
-        dest = DATA / "demo.xlsx"
-        if file.filename and file.filename.lower().endswith(".xlsx"):
+        fname = (file.filename or "").lower()
+        if fname.endswith(".xlsx"):
+            dest = DATA / "demo.xlsx"
+        elif fname.endswith(".pdf"):
+            dest = DATA / "demo.pdf"
+        else:
+            dest = None
+        if dest is not None:
             with dest.open("wb") as out:
                 shutil.copyfileobj(file.file, out)
             _full_ingest(str(dest), actor="demo-user")
@@ -321,20 +333,21 @@ async def api_ingest_stream(file: UploadFile = File(None)):
     Pacing is added between frames so humans can actually watch it happen.
     """
     filename = (file.filename if file else None) or "unknown"
-    is_xlsx = bool(file and file.filename and file.filename.lower().endswith(".xlsx"))
+    lower = filename.lower()
+    supported = lower.endswith(".xlsx") or lower.endswith(".pdf")
     file_bytes = b""
-    if file is not None and is_xlsx:
+    if file is not None and supported:
         file_bytes = await file.read()
 
     async def gen():
         t0 = time.perf_counter()
         yield _sse("start", {"filename": filename, "size": len(file_bytes), "ts": time.time()})
 
-        if not is_xlsx:
-            yield _sse("error", {"message": f"Only .xlsx supported in streaming mode (got {filename})"})
+        if not supported:
+            yield _sse("error", {"message": f"Only .xlsx / .pdf supported (got {filename})"})
             return
 
-        dest = DATA / "demo.xlsx"
+        dest = DATA / ("demo.pdf" if lower.endswith(".pdf") else "demo.xlsx")
         with dest.open("wb") as out:
             out.write(file_bytes)
         yield _sse("saved", {"path": str(dest), "bytes": len(file_bytes)})
@@ -403,14 +416,15 @@ def _sse(event: str, data) -> bytes:
 
 @app.post("/api/reset")
 async def api_reset():
-    store.reset_db()
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, store.reset_db)
     if XLSX.exists():
-        _full_ingest(str(XLSX), actor="demo-user")
+        await loop.run_in_executor(None, _full_ingest, str(XLSX), "demo-user")
     return {"ok": True}
 
 
 @app.get("/api/sheets")
-async def api_sheets():
+def api_sheets():
     if not XLSX.exists():
         return {"sheets": []}
     res = ingest.parse_workbook(str(XLSX))
@@ -418,7 +432,7 @@ async def api_sheets():
 
 
 @app.get("/api/mapping")
-async def api_mapping():
+def api_mapping():
     with store.tx() as conn:
         rows = conn.execute(
             "SELECT * FROM mapping_issues ORDER BY CASE status WHEN 'error' THEN 0 WHEN 'warn' THEN 1 ELSE 2 END, source_field"
@@ -427,7 +441,7 @@ async def api_mapping():
 
 
 @app.get("/api/mapping/{issue_id}/explain")
-async def api_mapping_explain(issue_id: int):
+def api_mapping_explain(issue_id: int):
     with store.tx() as conn:
         row = conn.execute("SELECT * FROM mapping_issues WHERE issue_id = %s", (issue_id,)).fetchone()
     if not row:
@@ -443,7 +457,7 @@ async def api_mapping_explain(issue_id: int):
 
 
 @app.get("/api/dedup")
-async def api_dedup():
+def api_dedup():
     with store.tx() as conn:
         rows = conn.execute(
             "SELECT * FROM dedup_clusters ORDER BY auto_merged DESC, confidence DESC"
@@ -458,7 +472,7 @@ async def api_dedup():
 
 
 @app.post("/api/dedup/{cluster_id}/override")
-async def api_dedup_override(cluster_id: int):
+def api_dedup_override(cluster_id: int):
     with store.tx() as conn:
         conn.execute("UPDATE dedup_clusters SET status='hitl' WHERE cluster_id = %s", (cluster_id,))
         row = conn.execute("SELECT * FROM dedup_clusters WHERE cluster_id = %s", (cluster_id,)).fetchone()
@@ -476,7 +490,7 @@ async def api_dedup_override(cluster_id: int):
 
 
 @app.get("/api/graph")
-async def api_graph():
+def api_graph():
     with store.tx() as conn:
         entities = [dict(r) for r in conn.execute("SELECT entity_identifier as entityIdentifier, name, legal_entity_type as legalEntityType, annual_revenue as annualRevenue FROM entities").fetchall()]
         humans = [dict(r) for r in conn.execute("SELECT human_identifier as humanIdentifier, first_name as firstName, last_name as lastName, occupation, marital_status as maritalStatus FROM humans").fetchall()]
@@ -485,7 +499,7 @@ async def api_graph():
 
 
 @app.get("/api/review")
-async def api_review():
+def api_review():
     with store.tx() as conn:
         rows = conn.execute(
             "SELECT * FROM review_queue ORDER BY status, created_ts DESC"
@@ -523,7 +537,7 @@ async def api_dag_stream():
 
 
 @app.get("/api/audit")
-async def api_audit():
+def api_audit():
     with store.tx() as conn:
         rows = conn.execute("SELECT * FROM audit_log ORDER BY audit_id DESC LIMIT 500").fetchall()
     return {"rows": [dict(r) for r in rows]}
@@ -540,35 +554,35 @@ async def api_reveal(request: Request):
 
 
 @app.get("/api/entities")
-async def api_entities():
+def api_entities():
     with store.tx() as conn:
         rows = conn.execute("SELECT * FROM entities ORDER BY entity_identifier").fetchall()
     return {"rows": [dict(r) for r in rows]}
 
 
 @app.get("/api/humans")
-async def api_humans():
+def api_humans():
     with store.tx() as conn:
         rows = conn.execute("SELECT * FROM humans ORDER BY human_identifier").fetchall()
     return {"rows": [dict(r) for r in rows]}
 
 
 @app.get("/api/contacts")
-async def api_contacts():
+def api_contacts():
     with store.tx() as conn:
         rows = conn.execute("SELECT * FROM contacts").fetchall()
     return {"rows": [dict(r) for r in rows]}
 
 
 @app.get("/api/markets")
-async def api_markets():
+def api_markets():
     with store.tx() as conn:
         rows = conn.execute("SELECT * FROM markets ORDER BY name").fetchall()
     return {"rows": [dict(r) for r in rows]}
 
 
 @app.get("/api/stats")
-async def api_stats():
+def api_stats():
     with store.tx() as conn:
         (ent,) = conn.execute("SELECT COUNT(*) FROM entities").fetchone()
         (hum,) = conn.execute("SELECT COUNT(*) FROM humans").fetchone()

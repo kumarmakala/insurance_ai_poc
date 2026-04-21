@@ -628,8 +628,8 @@ function IngestPanel({ onIngested, onNavigate }) {
                 const reason = (e2.message || String(e2)).toLowerCase();
                 const friendly = reason.includes("413") || reason.includes("too large")
                     ? "File is too large to ingest."
-                    : reason.includes("only .xlsx")
-                    ? "Only Excel (.xlsx) workbooks can be ingested today."
+                    : reason.includes("only .xlsx") || reason.includes("only .xlsx / .pdf")
+                    ? "Only Excel (.xlsx) workbooks or policy PDFs can be ingested today."
                     : reason.includes("failed to fetch") || reason.includes("network")
                     ? "Lost connection to IRYSCLOUD. Check the server is running."
                     : "IRYSCLOUD couldn't read that file. Open it in Excel to verify, then retry.";
@@ -655,7 +655,7 @@ function IngestPanel({ onIngested, onNavigate }) {
         if (running) { toast.push("Ingest already running", "info"); return; }
         const el = fileRef.current;
         if (!el) { toast.push("File input not ready — reload the page", "error"); return; }
-        toast.push("Opening file chooser…", "info", "Pick an .xlsx workbook");
+        toast.push("Opening file chooser…", "info", "Pick an .xlsx workbook or policy PDF");
         try { el.click(); }
         catch (e) { toast.push("Couldn't open chooser", "error", String(e.message || e)); }
     };
@@ -680,7 +680,7 @@ function IngestPanel({ onIngested, onNavigate }) {
             <PageHeader
                 eyebrow="Migration console"
                 title="Ingest a vendor export"
-                subtitle="Drop an Excel (.xlsx) export. IRYSCLOUD classifies it, maps columns to the canonical schema, dedupes, builds relationships, validates, and loads to IRYSCLOUD — all visible, all audited. CSV/PDF/EML arriving next."
+                subtitle="Drop an Excel (.xlsx) workbook or a policy PDF. IRYSCLOUD classifies it, maps columns to the canonical schema, dedupes, builds relationships, validates, and loads to IRYSCLOUD — all visible, all audited. CSV/EML arriving next."
                 actions={<>
                     <a href="/static/assets/sample.xlsx" download="IRYSCLOUD_Ingestion_Template.xlsx" className="inline-block">
                         <Button variant="secondary" size="sm" icon="download">Download template</Button>
@@ -722,8 +722,8 @@ function IngestPanel({ onIngested, onNavigate }) {
                         <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center">
                             <Icon name={running ? "loader" : "upload"} size={24} />
                         </div>
-                        <div className="font-semibold text-ink-900">{running ? "Ingestion running…" : "Drop an .xlsx workbook here"}</div>
-                        <div className="text-sm text-ink-500 mt-1">Excel (.xlsx) workbooks only — CSV / PDF / EML support lands next</div>
+                        <div className="font-semibold text-ink-900">{running ? "Ingestion running…" : "Drop an .xlsx workbook or policy PDF here"}</div>
+                        <div className="text-sm text-ink-500 mt-1">Excel (.xlsx) or PDF policy declarations — CSV / EML support lands next</div>
                         <div className="mt-5 flex items-center justify-center gap-2">
                             <label
                                 htmlFor="iris-xlsx-input"
@@ -747,7 +747,7 @@ function IngestPanel({ onIngested, onNavigate }) {
                             id="iris-xlsx-input"
                             ref={fileRef}
                             type="file"
-                            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.pdf,application/pdf"
                             className="absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0 opacity-0"
                             tabIndex={-1}
                             aria-hidden="true"

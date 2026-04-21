@@ -45,7 +45,12 @@ TARGET_SCHEMA = _strip_quotes(os.environ.get("TARGET_SCHEMA", "public")) or "pub
 CONNINFO = (
     f"host={PG_HOST} port={PG_PORT} dbname={PG_DBNAME} "
     f"user={PG_USER} password={PG_PASSWORD} sslmode={PG_SSLMODE} "
-    f"application_name=iris-poc"
+    f"application_name=iris-poc "
+    # Fail fast on network hiccups to a remote AlloyDB rather than hanging forever.
+    f"connect_timeout=10 "
+    f"keepalives=1 keepalives_idle=30 keepalives_interval=10 keepalives_count=3 "
+    # Server-side safety net: no single statement can hold a transaction past 5m.
+    f"options='-c statement_timeout=300000 -c idle_in_transaction_session_timeout=300000'"
 )
 
 DB_DSN = f"postgresql://{PG_USER}@{PG_HOST}:{PG_PORT}/{PG_DBNAME}?schema={TARGET_SCHEMA}"
@@ -117,6 +122,7 @@ def _pool() -> ConnectionPool:
                     max_size=8,
                     configure=_configure,
                     open=True,
+                    timeout=10,
                 )
     return _POOL
 
