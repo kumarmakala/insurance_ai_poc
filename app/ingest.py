@@ -124,12 +124,22 @@ def parse_workbook(xlsx_path: str | Path) -> IngestResult:
         sheet = wb.get_sheet_by_name(name)
         rows = sheet.to_python()
         kind = SHEET_KIND.get(name, "unknown")
+        headers = [str(_as_cell(h) or "") for h in (rows[0] if rows else [])]
+        sample_rows = []
+        for r in rows[1:3] if len(rows) > 1 else []:
+            cells = [
+                ("" if _as_cell(c) is None else str(_as_cell(c)))
+                for c in (list(r) + [None] * max(0, len(headers) - len(r)))[: len(headers)]
+            ]
+            sample_rows.append(cells)
         result.sheets.append(
             {
                 "name": name,
                 "kind": kind,
                 "rows": max(0, len(rows) - 1),
                 "cols": len(rows[0]) if rows else 0,
+                "headers": headers,
+                "sample": sample_rows,
             }
         )
         if kind == "reference":

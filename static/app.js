@@ -30,13 +30,17 @@ const api = async (path, opts = {}) => {
     return r.json();
 };
 
-/** Consume an SSE response stream from fetch(); calls onEvent({event,data}) per frame. */
+/** Consume an SSE response stream from fetch(); calls onEvent({event,data}) per frame.
+ *  If onEvent returns "stop" (or any truthy value), the reader is cancelled and the
+ *  function returns cleanly — useful when a terminal event like `end` arrives but the
+ *  server hasn't closed the HTTP body yet (uvicorn can keepalive for a bit). */
 async function streamSSE(path, opts, onEvent) {
     const r = await fetch(path, opts);
     if (!r.ok || !r.body) throw new Error(`${r.status} ${path}`);
     const reader = r.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
+    const stop = async () => { try { await reader.cancel(); } catch {} };
     for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -50,10 +54,12 @@ async function streamSSE(path, opts, onEvent) {
                 if (line.startsWith("event:")) ev = line.slice(6).trim();
                 else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
             }
-            if (dataLines.length) {
-                try { onEvent({ event: ev, data: JSON.parse(dataLines.join("\n")) }); }
-                catch { onEvent({ event: ev, data: dataLines.join("\n") }); }
-            }
+            if (!dataLines.length) continue;
+            let payload;
+            try { payload = JSON.parse(dataLines.join("\n")); }
+            catch { payload = dataLines.join("\n"); }
+            const verdict = onEvent({ event: ev, data: payload });
+            if (verdict) { await stop(); return; }
         }
     }
 }
@@ -447,10 +453,10 @@ function Sidebar({ active, onSelect, stats }) {
                 ))}
             </nav>
             <div className="border-t border-ink-800 px-4 py-3 text-[11px] text-ink-500 flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-ink-800 flex items-center justify-center text-ink-300 font-semibold text-[11px]">HR</div>
+                <div className="w-6 h-6 rounded-full bg-ink-800 flex items-center justify-center text-ink-300 font-semibold text-[11px]">VS</div>
                 <div className="flex-1">
-                    <div className="text-ink-200">Harbor Risk · Ops</div>
-                    <div className="text-ink-500">migrations@harborrisk.com</div>
+                    <div className="text-ink-200">VidyaSri</div>
+                    <div className="text-ink-500">vidya@iryscloud.com</div>
                 </div>
             </div>
         </aside>
@@ -559,6 +565,94 @@ function StatCard({ label, value, icon, delta }) {
     );
 }
 
+const inferFileType = (name) => {
+    const lower = (name || "").toLowerCase();
+    if (lower.endsWith(".pdf")) return "pdf";
+    if (lower.endsWith(".xlsx")) return "xlsx";
+    return "other";
+};
+
+const humanSize = (bytes) => {
+    if (bytes == null) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+};
+
+const fmtSecs = (ms) => {
+    const s = Math.max(0, ms / 1000);
+    if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
+    const m = Math.floor(s / 60);
+    const r = Math.round(s - m * 60);
+    return `${m}m ${r}s`;
+};
+
+function SheetCard({ sh }) {
+    const [hover, setHover] = useState(false);
+    const headers = Array.isArray(sh.headers) ? sh.headers.filter(Boolean) : [];
+    const sample = Array.isArray(sh.sample) ? sh.sample : [];
+    const hasPreview = headers.length > 0;
+    const MAX_COLS = 12;
+    const shownCols = headers.slice(0, MAX_COLS);
+    const moreCols = Math.max(0, headers.length - MAX_COLS);
+    return (
+        <Card padding="p-4">
+            <div className="flex items-start justify-between">
+                <div>
+                    <div className="text-[10.5px] uppercase tracking-widest text-ink-500 font-semibold">{(sh.kind || "unknown").replace(/_/g, " ")}</div>
+                    <div className="font-semibold text-ink-900 text-[13.5px] mt-0.5">{sh.name}</div>
+                </div>
+                <div
+                    className="relative"
+                    onMouseEnter={() => setHover(true)}
+                    onMouseLeave={() => setHover(false)}
+                >
+                    <Icon
+                        name="file_spread"
+                        size={16}
+                        className={`cursor-help transition-colors ${hasPreview ? (hover ? "text-brand-600" : "text-ink-400") : "text-ink-300"}`}
+                    />
+                    {hover && hasPreview && (
+                        <div className="absolute right-0 top-6 z-40 w-80 max-w-[22rem] rounded-lg bg-white shadow-pop border border-ink-200 p-3 animate-slide-up">
+                            <div className="text-[10.5px] uppercase tracking-widest text-ink-500 font-semibold">Preview</div>
+                            <div className="mt-1 text-[12px] font-semibold text-ink-900 truncate">{sh.name}</div>
+                            <div className="text-[11px] text-ink-500 tabular mt-0.5">{sh.rows} rows · {sh.cols} cols</div>
+                            <div className="mt-2.5">
+                                <div className="text-[10.5px] uppercase tracking-widest text-ink-500 font-semibold mb-1">Columns</div>
+                                <div className="flex flex-wrap gap-1">
+                                    {shownCols.map((h, i) => (
+                                        <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-ink-100 text-ink-700 text-[10.5px] font-medium">{h}</span>
+                                    ))}
+                                    {moreCols > 0 && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-ink-50 text-ink-500 text-[10.5px] font-medium">+{moreCols} more</span>
+                                    )}
+                                </div>
+                            </div>
+                            {sample.length > 0 && (
+                                <div className="mt-2.5">
+                                    <div className="text-[10.5px] uppercase tracking-widest text-ink-500 font-semibold mb-1">Sample</div>
+                                    <div className="space-y-1">
+                                        {sample.slice(0, 2).map((row, ri) => (
+                                            <div key={ri} className="text-[11px] text-ink-700 tabular truncate" title={row.filter(Boolean).join(" · ")}>
+                                                {row.slice(0, 4).map((c, ci) => (
+                                                    <span key={ci} className="inline-block mr-1.5">
+                                                        <span className="text-ink-400">{shownCols[ci] || ""}:</span> <span className="text-ink-800">{String(c || "—").slice(0, 24)}</span>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+            <div className="text-[11.5px] text-ink-500 mt-2 tabular">{sh.rows} rows · {sh.cols} cols</div>
+        </Card>
+    );
+}
+
 function IngestPanel({ onIngested, onNavigate }) {
     const [dragging, setDragging] = useState(false);
     const [sheets, setSheets] = useState([]);
@@ -568,10 +662,32 @@ function IngestPanel({ onIngested, onNavigate }) {
     const [summary, setSummary] = useState(null);
     const [err, setErr] = useState(null);
     const [stats, setStats] = useState(null);
-    const [received, setReceived] = useState(null); // { filename, size }
+    // queue of files in the current batch:
+    // [{ filename, size, type, status, counts, err, startedAt, finishedAt }]
+    const [files, setFiles] = useState([]);
+    const [activeIdx, setActiveIdx] = useState(null);
     const [running, setRunning] = useState(false);
+    const [windowDragging, setWindowDragging] = useState(false);
+    const [, setTick] = useState(0);
     const fileRef = useRef();
     const toast = useToast();
+
+    // Refs that the async queue loop and global drop handler read from.
+    const queueRef = useRef([]);          // File objects, index-aligned with `files` state
+    const processingRef = useRef(false);  // true while processQueue is looping
+    const resetNeededRef = useRef(true);  // server truncate pending until a file commits
+    const batchStartRef = useRef(null);   // performance.now() of current batch
+    const filesRef = useRef([]);          // mirror of `files` for use in async contexts
+    const handleFilesRef = useRef(() => {}); // stable pointer for window drop handler
+
+    useEffect(() => { filesRef.current = files; }, [files]);
+
+    // Live ticker so per-file "running for Xs" and batch ETA update each second.
+    useEffect(() => {
+        if (!running) return;
+        const id = setInterval(() => setTick(t => t + 1), 1000);
+        return () => clearInterval(id);
+    }, [running]);
 
     const refreshAll = async () => {
         try {
@@ -581,81 +697,233 @@ function IngestPanel({ onIngested, onNavigate }) {
     };
     useEffect(() => { refreshAll(); }, []);
 
-    const handleFile = async (file) => {
-        setErr(null); setSummary(null); setStepState({}); setStepNotes({}); setStepDurations({});
-        setReceived({ filename: file.name, size: file.size });
-        setRunning(true);
-        toast.push("File received", "info", `${file.name} · ${(file.size/1024).toFixed(1)} KB`);
+    const patchFile = (idx, patch) => {
+        setFiles(prev => prev.map((f, i) => i === idx ? { ...f, ...patch } : f));
+    };
+
+    const friendlyError = (msg) => {
+        const reason = (msg || "").toLowerCase();
+        if (reason.includes("413") || reason.includes("too large")) return "File is too large to ingest.";
+        if (reason.includes("only .xlsx") || reason.includes("only .xlsx / .pdf"))
+            return "Only Excel (.xlsx) workbooks or policy PDFs can be ingested today.";
+        if (reason.includes("failed to fetch") || reason.includes("network"))
+            return "Lost connection to IRYSCLOUD. Check the server is running.";
+        return "IRYSCLOUD couldn't read that file. Open it in Excel to verify, then retry.";
+    };
+
+    // Process a single file within a batch. `reset=true` wipes the DB before this file;
+    // subsequent files in the batch pass `reset=false` so their rows append.
+    const ingestOne = async (file, idx, reset) => {
+        setActiveIdx(idx);
+        setStepState({}); setStepNotes({}); setStepDurations({});
+        const startedAt = performance.now();
+        patchFile(idx, { status: "running", err: null, counts: null, startedAt, finishedAt: null });
 
         const form = new FormData();
         form.append("file", file);
+        const qs = reset ? "" : "?reset=false";
+        let finalCounts = null;
         try {
-            await streamSSE("/api/ingest/stream", { method: "POST", body: form }, ({ event, data }) => {
+            let streamErr = null;
+            await streamSSE(`/api/ingest/stream${qs}`, { method: "POST", body: form }, ({ event, data }) => {
                 if (event === "step") {
                     setStepState(p => ({ ...p, [data.id]: data.status }));
                     if (data.note) setStepNotes(p => ({ ...p, [data.id]: data.note }));
                     if (data.duration_ms != null) setStepDurations(p => ({ ...p, [data.id]: data.duration_ms }));
                 } else if (event === "end") {
-                    setSummary({
-                        processed: !!data.processed,
-                        counts: {
-                            entities: data.entities, humans: data.humans,
-                            contacts: data.contacts, relationships: data.relationships,
-                            markets: data.markets,
-                        },
-                    });
-                    toast.push("Ingestion complete", "success", `${data.entities} entities · ${data.humans} humans · ${data.contacts} contacts`);
-                    refreshAll();
-                    onIngested && onIngested();
+                    finalCounts = {
+                        entities: data.entities, humans: data.humans,
+                        contacts: data.contacts, relationships: data.relationships,
+                        markets: data.markets,
+                    };
+                    // Finalize immediately — don't wait for the HTTP body to close.
+                    return "stop";
                 } else if (event === "error") {
-                    throw new Error(data.message || "stream error");
+                    streamErr = new Error(data.message || "stream error");
+                    return "stop";
                 }
             });
+            if (streamErr) throw streamErr;
+            patchFile(idx, { status: "success", counts: finalCounts, finishedAt: performance.now() });
+            return { ok: true, counts: finalCounts };
         } catch (e) {
-            // Fallback: talk to the non-streaming endpoint so an older server still works
+            // Fallback: non-streaming endpoint so an older server still works
             try {
                 const form2 = new FormData();
                 form2.append("file", file);
-                const r = await api("/api/ingest", { method: "POST", body: form2 });
-                setSummary(r);
-                for (const s of PIPE_STEPS) {
-                    setStepState(p => ({ ...p, [s.id]: "success" }));
-                }
-                toast.push("Ingestion complete", "success", `${r.counts?.entities||0} entities · ${r.counts?.humans||0} humans (non-streaming fallback)`);
-                refreshAll();
-                onIngested && onIngested();
+                const r = await api(`/api/ingest${qs}`, { method: "POST", body: form2 });
+                for (const s of PIPE_STEPS) setStepState(p => ({ ...p, [s.id]: "success" }));
+                const counts = r.counts || null;
+                patchFile(idx, { status: "success", counts, finishedAt: performance.now() });
+                return { ok: true, counts };
             } catch (e2) {
-                const reason = (e2.message || String(e2)).toLowerCase();
-                const friendly = reason.includes("413") || reason.includes("too large")
-                    ? "File is too large to ingest."
-                    : reason.includes("only .xlsx") || reason.includes("only .xlsx / .pdf")
-                    ? "Only Excel (.xlsx) workbooks or policy PDFs can be ingested today."
-                    : reason.includes("failed to fetch") || reason.includes("network")
-                    ? "Lost connection to IRYSCLOUD. Check the server is running."
-                    : "IRYSCLOUD couldn't read that file. Open it in Excel to verify, then retry.";
-                setErr(friendly);
-                toast.push("Ingestion failed", "error", friendly);
+                const friendly = friendlyError(e2.message || String(e2));
+                patchFile(idx, { status: "error", err: friendly, finishedAt: performance.now() });
+                return { ok: false, err: friendly };
             }
-        } finally {
-            setRunning(false);
         }
     };
 
+    // Walks the `files` state, picking up any pending rows and running them serially.
+    // Safe to call repeatedly — guarded by processingRef so only one loop runs at a time.
+    const processQueue = async () => {
+        if (processingRef.current) return;
+        processingRef.current = true;
+        setRunning(true);
+        let lastCounts = null;
+        let firstErr = null;
+        for (;;) {
+            const snapshot = filesRef.current;
+            const idx = snapshot.findIndex(f => f.status === "pending");
+            if (idx === -1) break;
+            const fileObj = queueRef.current[idx];
+            if (!fileObj) {
+                patchFile(idx, { status: "error", err: "queue desync — re-upload this file" });
+                continue;
+            }
+            const res = await ingestOne(fileObj, idx, resetNeededRef.current);
+            if (res.ok) {
+                lastCounts = res.counts || lastCounts;
+                resetNeededRef.current = false;
+            } else if (!firstErr) {
+                firstErr = res.err;
+            }
+        }
+        setActiveIdx(null);
+        setRunning(false);
+        processingRef.current = false;
+
+        if (lastCounts) setSummary({ processed: true, counts: lastCounts });
+        const finalFiles = filesRef.current;
+        const total = finalFiles.length;
+        const okN = finalFiles.filter(f => f.status === "success").length;
+        const failN = finalFiles.filter(f => f.status === "error").length;
+        if (firstErr && okN === 0) setErr(firstErr);
+        if (okN > 0) {
+            const label = total === 1 ? "Ingestion complete" : `Batch complete — ${okN}/${total} files`;
+            const detail = lastCounts
+                ? `${lastCounts.entities} entities · ${lastCounts.humans} humans · ${lastCounts.contacts} contacts`
+                : undefined;
+            toast.push(label, failN ? "info" : "success", detail);
+            refreshAll();
+            onIngested && onIngested();
+        } else if (firstErr) {
+            toast.push("Ingestion failed", "error", firstErr);
+        }
+    };
+
+    const handleFiles = (fileList) => {
+        const list = Array.from(fileList || []).filter(Boolean);
+        if (!list.length) return;
+        const entries = list.map(f => ({
+            filename: f.name, size: f.size, type: inferFileType(f.name),
+            status: "pending", counts: null, err: null, startedAt: null, finishedAt: null,
+        }));
+        if (!processingRef.current) {
+            // Fresh batch — clear prior batch artefacts and reset the DB on the first file.
+            setErr(null); setSummary(null);
+            setStepState({}); setStepNotes({}); setStepDurations({});
+            setActiveIdx(null);
+            resetNeededRef.current = true;
+            batchStartRef.current = performance.now();
+            queueRef.current = [...list];
+            // Keep filesRef synchronized so processQueue (below) sees pending rows
+            // on its first synchronous pass, before React commits setFiles.
+            filesRef.current = entries;
+            setFiles(entries);
+            toast.push(
+                list.length === 1 ? "File received" : `${list.length} files queued`,
+                "info",
+                list.length === 1
+                    ? `${list[0].name} · ${humanSize(list[0].size)}`
+                    : "Processing sequentially — first wipes, rest append",
+            );
+        } else {
+            // Append to the live batch; the running loop will pick them up in order.
+            queueRef.current = [...queueRef.current, ...list];
+            filesRef.current = [...filesRef.current, ...entries];
+            setFiles(prev => [...prev, ...entries]);
+            toast.push(
+                `${list.length} file${list.length === 1 ? "" : "s"} added`,
+                "info",
+                "Will process after the current queue drains",
+            );
+        }
+        processQueue();
+    };
+
+    const removeFile = (idx) => {
+        const entry = filesRef.current[idx];
+        if (!entry || entry.status !== "pending") return;
+        setFiles(prev => prev.filter((_, i) => i !== idx));
+        queueRef.current = queueRef.current.filter((_, i) => i !== idx);
+    };
+
+    const retryFile = (idx) => {
+        const entry = filesRef.current[idx];
+        if (!entry || entry.status !== "error") return;
+        const reset = { status: "pending", err: null, counts: null, startedAt: null, finishedAt: null };
+        // Sync the ref so processQueue's first pass sees the pending row immediately.
+        filesRef.current = filesRef.current.map((f, i) => i === idx ? { ...f, ...reset } : f);
+        patchFile(idx, reset);
+        processQueue();
+    };
+
+    // Keep a stable pointer for the window-level drop handler so it never sees a
+    // stale closure even as handleFiles gets re-created each render.
+    handleFilesRef.current = handleFiles;
+
+    // Window-level drag/drop handling: full-page overlay + drop-anywhere behaviour.
+    // Also prevents the browser from opening files when dropped outside the dropzone.
     useEffect(() => {
-        const block = e => { e.preventDefault(); };
-        window.addEventListener("dragover", block);
-        window.addEventListener("drop", block);
+        let dragDepth = 0;
+        const hasFiles = (e) => {
+            try {
+                const types = e.dataTransfer?.types;
+                if (!types) return false;
+                for (let i = 0; i < types.length; i++) if (types[i] === "Files") return true;
+                return false;
+            } catch { return false; }
+        };
+        const onEnter = (e) => {
+            if (!hasFiles(e)) return;
+            e.preventDefault();
+            dragDepth++;
+            setWindowDragging(true);
+        };
+        const onLeave = (e) => {
+            e.preventDefault();
+            dragDepth = Math.max(0, dragDepth - 1);
+            if (dragDepth === 0) setWindowDragging(false);
+        };
+        const onOver = (e) => { e.preventDefault(); };
+        const onDrop = (e) => {
+            e.preventDefault();
+            dragDepth = 0;
+            setWindowDragging(false);
+            const fs = Array.from(e.dataTransfer?.files || []);
+            if (fs.length) handleFilesRef.current?.(fs);
+        };
+        window.addEventListener("dragenter", onEnter);
+        window.addEventListener("dragleave", onLeave);
+        window.addEventListener("dragover", onOver);
+        window.addEventListener("drop", onDrop);
         return () => {
-            window.removeEventListener("dragover", block);
-            window.removeEventListener("drop", block);
+            window.removeEventListener("dragenter", onEnter);
+            window.removeEventListener("dragleave", onLeave);
+            window.removeEventListener("dragover", onOver);
+            window.removeEventListener("drop", onDrop);
         };
     }, []);
 
     const openChooser = () => {
-        if (running) { toast.push("Ingest already running", "info"); return; }
         const el = fileRef.current;
         if (!el) { toast.push("File input not ready — reload the page", "error"); return; }
-        toast.push("Opening file chooser…", "info", "Pick an .xlsx workbook or policy PDF");
+        toast.push(
+            running ? "Add more files" : "Opening file chooser…",
+            "info",
+            running ? "They'll be queued behind the current batch" : "Pick one or more .xlsx workbooks or policy PDFs",
+        );
         try { el.click(); }
         catch (e) { toast.push("Couldn't open chooser", "error", String(e.message || e)); }
     };
@@ -668,7 +936,7 @@ function IngestPanel({ onIngested, onNavigate }) {
             if (!r.ok) throw new Error(`sample fetch ${r.status}`);
             const buf = await r.arrayBuffer();
             const file = new File([buf], "IRYSCLOUD_Sample_Export.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-            await handleFile(file);
+            await handleFiles([file]);
         } catch (e) {
             setErr(`Could not load the sample workbook: ${e.message || e}`);
             toast.push("Sample failed", "error", String(e.message || e));
@@ -677,10 +945,27 @@ function IngestPanel({ onIngested, onNavigate }) {
 
     return (
         <div>
+            {windowDragging && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-600/15 backdrop-blur-sm pointer-events-none animate-fade-in">
+                    <div className="rounded-3xl border-2 border-dashed border-brand-500 bg-white/95 px-10 py-8 shadow-pop flex items-center gap-5 max-w-md">
+                        <div className="w-16 h-16 rounded-2xl bg-brand-600 text-white flex items-center justify-center">
+                            <Icon name="upload" size={28} />
+                        </div>
+                        <div>
+                            <div className="text-lg font-semibold text-ink-900">
+                                {processingRef.current ? "Drop to add to queue" : "Drop to start ingestion"}
+                            </div>
+                            <div className="text-sm text-ink-500 mt-0.5">
+                                .xlsx workbooks or .pdf policy declarations — mix is supported
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             <PageHeader
                 eyebrow="Migration console"
                 title="Ingest a vendor export"
-                subtitle="Drop an Excel (.xlsx) workbook or a policy PDF. IRYSCLOUD classifies it, maps columns to the canonical schema, dedupes, builds relationships, validates, and loads to IRYSCLOUD — all visible, all audited. CSV/EML arriving next."
+                subtitle="Drop one or more Excel (.xlsx) workbooks or policy PDFs. IRYSCLOUD classifies each file, maps columns to the canonical schema, dedupes, builds relationships, validates, and loads to IRYSCLOUD — all visible, all audited. CSV/EML arriving next."
                 actions={<>
                     <a href="/static/assets/sample.xlsx" download="IRYSCLOUD_Ingestion_Template.xlsx" className="inline-block">
                         <Button variant="secondary" size="sm" icon="download">Download template</Button>
@@ -690,11 +975,11 @@ function IngestPanel({ onIngested, onNavigate }) {
                     </Button>
                     <label
                         htmlFor="iris-xlsx-input"
-                        onClick={() => !running && toast.push("Opening file chooser…", "info")}
-                        className={`h-8 px-3 text-[13px] inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors focus-ring ${running ? "bg-brand-400 text-white cursor-not-allowed opacity-60" : "bg-brand-600 hover:bg-brand-700 text-white cursor-pointer shadow-[0_1px_0_rgba(255,255,255,.15)_inset,0_1px_2px_rgba(15,23,42,.15)]"}`}
+                        onClick={() => toast.push(running ? "Add more files" : "Opening file chooser…", "info")}
+                        className="h-8 px-3 text-[13px] inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors focus-ring bg-brand-600 hover:bg-brand-700 text-white cursor-pointer shadow-[0_1px_0_rgba(255,255,255,.15)_inset,0_1px_2px_rgba(15,23,42,.15)]"
                     >
-                        <Icon name={running ? "loader" : "upload"} size={14} />
-                        {running ? "Running…" : "Upload file"}
+                        <Icon name="upload" size={14} />
+                        {running ? "Add more" : "Upload files"}
                     </label>
                 </>}
             />
@@ -710,55 +995,72 @@ function IngestPanel({ onIngested, onNavigate }) {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
-                    <div className={`dropzone ${dragging ? "is-drag" : ""} ${running ? "opacity-60 pointer-events-none" : ""} rounded-2xl py-14 text-center`}
+                    <div className={`dropzone ${dragging || windowDragging ? "is-drag" : ""} rounded-2xl py-14 text-center`}
                          role="button"
-                         tabIndex={running ? -1 : 0}
-                         aria-label="Upload an Excel workbook to ingest"
-                         aria-disabled={running}
-                         onKeyDown={e => { if (!running && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openChooser(); } }}
-                         onDragOver={e => { e.preventDefault(); if (!running) setDragging(true); }}
+                         tabIndex={0}
+                         aria-label="Upload one or more Excel workbooks or policy PDFs to ingest"
+                         onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openChooser(); } }}
+                         onDragOver={e => { e.preventDefault(); setDragging(true); }}
                          onDragLeave={() => setDragging(false)}
-                         onDrop={e => { e.preventDefault(); setDragging(false); if (running) return; const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); }}>
-                        <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center">
-                            <Icon name={running ? "loader" : "upload"} size={24} />
+                         onDrop={e => { e.preventDefault(); setDragging(false); /* window-level handler ingests the files */ }}>
+                        <div className={`w-14 h-14 mx-auto mb-4 rounded-2xl flex items-center justify-center transition-colors ${running ? "bg-brand-600 text-white" : "bg-brand-50 text-brand-600"}`}>
+                            <Icon name="upload" size={24} />
                         </div>
-                        <div className="font-semibold text-ink-900">{running ? "Ingestion running…" : "Drop an .xlsx workbook or policy PDF here"}</div>
-                        <div className="text-sm text-ink-500 mt-1">Excel (.xlsx) or PDF policy declarations — CSV / EML support lands next</div>
+                        <div className="font-semibold text-ink-900 text-[15px]">
+                            {running
+                                ? (files.length > 1 ? `Ingesting ${Math.min((activeIdx ?? 0) + 1, files.length)} of ${files.length}…` : "Ingestion running…")
+                                : "Drop .xlsx workbooks or policy PDFs anywhere"}
+                        </div>
+                        <div className="text-sm text-ink-500 mt-1">
+                            {running
+                                ? "Keep dragging files onto the page to queue them behind the current batch."
+                                : "Batch-ingest a mix of workbooks and policy PDFs — first file wipes, the rest append."}
+                        </div>
                         <div className="mt-5 flex items-center justify-center gap-2">
                             <label
                                 htmlFor="iris-xlsx-input"
-                                onClick={() => !running && toast.push("Opening file chooser…", "info")}
-                                className={`h-8 px-3 text-[13px] inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors focus-ring ${running ? "bg-brand-400 text-white cursor-not-allowed opacity-60" : "bg-brand-600 hover:bg-brand-700 text-white cursor-pointer shadow-[0_1px_0_rgba(255,255,255,.15)_inset,0_1px_2px_rgba(15,23,42,.15)]"}`}
+                                onClick={() => toast.push(running ? "Add more files" : "Opening file chooser…", "info")}
+                                className="h-8 px-3 text-[13px] inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors focus-ring bg-brand-600 hover:bg-brand-700 text-white cursor-pointer shadow-[0_1px_0_rgba(255,255,255,.15)_inset,0_1px_2px_rgba(15,23,42,.15)]"
                             >
-                                <Icon name={running ? "loader" : "file_spread"} size={14} />
-                                {running ? "Running…" : "Choose file…"}
+                                <Icon name="file_spread" size={14} />
+                                {running ? "Add more…" : "Choose files…"}
                             </label>
                             <Button variant="soft" size="sm" icon="zap" disabled={running} onClick={runSample}>
                                 Run sample
                             </Button>
                         </div>
-                        {received && (
-                            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 text-brand-700 text-[12px] font-medium">
-                                <span className={`dot ${running ? "dot-brand pulse-dot" : "dot-success"}`} />
-                                Received · {received.filename} · {(received.size/1024).toFixed(1)} KB
-                            </div>
-                        )}
+                        <div className="mt-4 flex items-center justify-center gap-3 text-[11px] text-ink-500">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> XLSX
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> PDF
+                            </span>
+                            <span className="text-ink-400">supported · mix freely</span>
+                        </div>
                         <input
                             id="iris-xlsx-input"
                             ref={fileRef}
                             type="file"
+                            multiple
                             accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.pdf,application/pdf"
                             className="absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0 opacity-0"
                             tabIndex={-1}
                             aria-hidden="true"
                             onClick={e => { e.target.value = ""; }}
-                            onChange={e => { const f = e.target.files[0]; if (f) handleFile(f); }}
+                            onChange={e => { const fs = Array.from(e.target.files || []); if (fs.length) handleFiles(fs); }}
                         />
                     </div>
 
                     <div className="mt-6">
                         <div className="flex items-center gap-2 mb-3">
                             <div className="text-[11px] uppercase tracking-widest text-ink-500 font-semibold">Pipeline</div>
+                            {activeIdx != null && files[activeIdx] && (
+                                <div className="text-[11px] text-ink-500 truncate max-w-[60%]">
+                                    <span className="text-ink-400">·</span> {files[activeIdx].filename}
+                                    {files.length > 1 && <span className="text-ink-400 ml-1">({activeIdx + 1}/{files.length})</span>}
+                                </div>
+                            )}
                             <div className="h-px flex-1 bg-ink-200" />
                         </div>
                         <div className="flex items-center gap-0 overflow-x-auto pb-2">
@@ -783,6 +1085,122 @@ function IngestPanel({ onIngested, onNavigate }) {
                             })}
                         </div>
                     </div>
+
+                    {files.length > 0 && (() => {
+                        const total = files.length;
+                        const okN = files.filter(f => f.status === "success").length;
+                        const failN = files.filter(f => f.status === "error").length;
+                        const pendingN = files.filter(f => f.status === "pending").length;
+                        const settledN = okN + failN;
+                        const pct = total ? (settledN / total) * 100 : 0;
+                        const elapsedMs = batchStartRef.current ? performance.now() - batchStartRef.current : 0;
+                        const avgMs = okN > 0 ? elapsedMs / okN : null;
+                        const etaMs = avgMs ? avgMs * (total - settledN) : null;
+                        const now = performance.now();
+                        return (
+                            <div className="mt-6">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="text-[11px] uppercase tracking-widest text-ink-500 font-semibold">Batch queue</div>
+                                    <div className="h-px flex-1 bg-ink-200" />
+                                    <div className="text-[11px] text-ink-500 tabular">
+                                        {settledN}/{total} done
+                                        {failN > 0 && <span className="text-red-600"> · {failN} failed</span>}
+                                        {pendingN > 0 && <span> · {pendingN} queued</span>}
+                                    </div>
+                                </div>
+                                <Card padding="p-0">
+                                    <div className="px-4 pt-4 pb-3">
+                                        <div className="flex items-center justify-between text-[11px] text-ink-500 tabular mb-2">
+                                            <div>
+                                                <span className="text-ink-900 font-semibold">{Math.round(pct)}%</span>
+                                                <span className="ml-2">{settledN} of {total} files</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span>{fmtSecs(elapsedMs)} elapsed</span>
+                                                {running && etaMs != null && etaMs > 0 && <span className="text-ink-400">· ~{fmtSecs(etaMs)} left</span>}
+                                                {!running && okN > 0 && avgMs != null && <span className="text-ink-400">· {fmtSecs(avgMs)} avg</span>}
+                                            </div>
+                                        </div>
+                                        <div className="h-1.5 rounded-full bg-ink-100 overflow-hidden">
+                                            <div
+                                                className={`h-full transition-all duration-300 ${failN && !running ? "bg-amber-500" : "bg-brand-500"}`}
+                                                style={{ width: `${pct}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <ul className="divide-y divide-ink-100 border-t border-ink-100">
+                                        {files.map((f, i) => {
+                                            const isActive = i === activeIdx;
+                                            const typeColor = f.type === "pdf"
+                                                ? "bg-rose-50 text-rose-600"
+                                                : f.type === "xlsx"
+                                                ? "bg-emerald-50 text-emerald-600"
+                                                : "bg-ink-100 text-ink-500";
+                                            const typeIcon = f.type === "pdf" ? "file" : "file_spread";
+                                            const elapsed =
+                                                f.startedAt && f.finishedAt ? fmtSecs(f.finishedAt - f.startedAt)
+                                                : f.startedAt ? `${fmtSecs(now - f.startedAt)}…`
+                                                : null;
+                                            return (
+                                                <li
+                                                    key={i}
+                                                    className={`flex items-center gap-3 px-4 py-3 transition-colors ${isActive ? "bg-brand-50/60" : ""}`}
+                                                >
+                                                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${typeColor}`}>
+                                                        <Icon name={typeIcon} size={16} />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="text-[13px] font-medium text-ink-900 truncate" title={f.filename}>
+                                                                {f.filename}
+                                                            </div>
+                                                            <span className="text-[9.5px] uppercase tracking-wider font-bold text-ink-400 shrink-0">
+                                                                {f.type === "other" ? "?" : f.type}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-[11px] text-ink-500 tabular mt-0.5">
+                                                            {humanSize(f.size)}
+                                                            {f.counts && (
+                                                                <span> · +{f.counts.entities} ent · +{f.counts.humans} hum · +{f.counts.contacts} con</span>
+                                                            )}
+                                                            {elapsed && <span className="text-ink-400"> · {elapsed}</span>}
+                                                            {f.err && <span className="text-red-600 block sm:inline"> · {f.err}</span>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        {f.status === "pending" && <Chip kind="neutral">Queued</Chip>}
+                                                        {f.status === "running" && <Chip kind="brand">Running</Chip>}
+                                                        {f.status === "success" && <Chip kind="success" icon="check">Done</Chip>}
+                                                        {f.status === "error"   && <Chip kind="danger" icon="alert">Failed</Chip>}
+                                                        {f.status === "pending" && !running && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeFile(i)}
+                                                                className="text-[11px] text-ink-400 hover:text-red-600 px-1.5 py-0.5 rounded transition-colors focus-ring"
+                                                                aria-label={`Remove ${f.filename} from queue`}
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        )}
+                                                        {f.status === "error" && !running && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => retryFile(i)}
+                                                                className="text-[11px] text-brand-600 hover:text-brand-700 hover:underline px-1.5 py-0.5 rounded transition-colors focus-ring"
+                                                                aria-label={`Retry ${f.filename}`}
+                                                            >
+                                                                Retry
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </Card>
+                            </div>
+                        );
+                    })()}
 
                     {err && (
                         <Card className="mt-6 border-red-300 bg-red-50">
@@ -818,18 +1236,7 @@ function IngestPanel({ onIngested, onNavigate }) {
                                 <div className="h-px flex-1 bg-ink-200" />
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                {sheets.map(sh => (
-                                    <Card key={sh.name} padding="p-4">
-                                        <div className="flex items-start justify-between">
-                                            <div>
-                                                <div className="text-[10.5px] uppercase tracking-widest text-ink-500 font-semibold">{(sh.kind || "unknown").replace(/_/g, " ")}</div>
-                                                <div className="font-semibold text-ink-900 text-[13.5px] mt-0.5">{sh.name}</div>
-                                            </div>
-                                            <Icon name="file_spread" size={16} className="text-ink-300" />
-                                        </div>
-                                        <div className="text-[11.5px] text-ink-500 mt-2 tabular">{sh.rows} rows · {sh.cols} cols</div>
-                                    </Card>
-                                ))}
+                                {sheets.map(sh => <SheetCard key={sh.name} sh={sh} />)}
                             </div>
                         </div>
                     )}

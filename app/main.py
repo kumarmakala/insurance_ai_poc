@@ -85,8 +85,13 @@ def _copy_rows(cur, table: str, cols: tuple[str, ...], rows) -> None:
             cp.write_row(r)
 
 
-def _full_ingest(source_path: str, actor: str = "demo-user"):
-    """Run the full pipeline and populate AlloyDB via bulk COPY. Idempotent via reset."""
+def _full_ingest(source_path: str, actor: str = "demo-user", reset: bool = True):
+    """Run the full pipeline and populate AlloyDB via bulk COPY.
+
+    `reset=True` (default) wipes the ingest tables first — safe for single-file runs.
+    `reset=False` appends: entity/human upserts handle their PKs, and the other
+    tables just grow. Used when the client is streaming a batch of files.
+    """
     res = ingest.parse_source(source_path)
 
     entities, humans = dedupe.seed_demo_duplicates(res.entities, res.humans)
@@ -228,11 +233,12 @@ def _full_ingest(source_path: str, actor: str = "demo-user"):
 
     with store.tx() as conn:
         cur = conn.cursor()
-        # Single fast wipe across all ingest tables. TRUNCATE resets SERIAL sequences too.
-        cur.execute(
-            "TRUNCATE entities, humans, contacts, relationships, markets, "
-            "mapping_issues, dedup_clusters, review_queue RESTART IDENTITY"
-        )
+        if reset:
+            # Single fast wipe across all ingest tables. TRUNCATE resets SERIAL sequences too.
+            cur.execute(
+                "TRUNCATE entities, humans, contacts, relationships, markets, "
+                "mapping_issues, dedup_clusters, review_queue RESTART IDENTITY"
+            )
 
         # entities/humans: COPY into temp staging, then INSERT ... ON CONFLICT DO UPDATE
         # to preserve the prior upsert semantics against duplicate primary keys in input.
@@ -288,9 +294,13 @@ def health():
 
 
 @app.post("/api/ingest")
-def api_ingest(file: UploadFile = File(None)):
+def api_ingest(file: UploadFile = File(None), reset: bool = True):
     """Accept an upload; xlsx or pdf are copied into data/ and run through the pipeline.
-    Sync endpoint so Starlette runs it in its threadpool — keeps the async loop free."""
+    Sync endpoint so Starlette runs it in its threadpool — keeps the async loop free.
+
+    `reset=false` appends to the existing DB, letting the client stream a batch
+    of files (first call resets, rest append).
+    """
     if file is not None:
         fname = (file.filename or "").lower()
         if fname.endswith(".xlsx"):
@@ -302,7 +312,7 @@ def api_ingest(file: UploadFile = File(None)):
         if dest is not None:
             with dest.open("wb") as out:
                 shutil.copyfileobj(file.file, out)
-            _full_ingest(str(dest), actor="demo-user")
+            _full_ingest(str(dest), actor="demo-user", reset=reset)
             summary = ingest.detect_source_summary(file.filename)
             summary["processed"] = True
         else:
@@ -326,7 +336,7 @@ def api_ingest(file: UploadFile = File(None)):
 
 
 @app.post("/api/ingest/stream")
-async def api_ingest_stream(file: UploadFile = File(None)):
+async def api_ingest_stream(file: UploadFile = File(None), reset: bool = True):
     """
     Streaming ingest: save file, run real pipeline, then emit SSE events
     that describe each stage using REAL counts pulled from the live DB.
@@ -355,7 +365,7 @@ async def api_ingest_stream(file: UploadFile = File(None)):
         # Run the actual pipeline (parse + dedupe + bulk COPY to AlloyDB).
         loop = asyncio.get_event_loop()
         pipeline_t0 = time.perf_counter()
-        await loop.run_in_executor(None, _full_ingest, str(dest), "demo-user")
+        await loop.run_in_executor(None, _full_ingest, str(dest), "demo-user", reset)
         pipeline_ms = int((time.perf_counter() - pipeline_t0) * 1000)
 
         # Stage descriptions with REAL counts from AlloyDB. No artificial pacing.
